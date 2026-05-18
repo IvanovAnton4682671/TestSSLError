@@ -1,0 +1,17 @@
+[
+  {
+    "Name": "New Profile",
+    "Projects": [
+      {
+        "Path": "TestSSLError.Server\\TestSSLError.Server.csproj",
+        "Action": "Start",
+        "DebugTarget": "TestSSLError.Server"
+      },
+      {
+        "Path": "TestSSLError.Api\\TestSSLError.Api.csproj",
+        "Action": "Start",
+        "DebugTarget": "https"
+      }
+    ]
+  }
+]
