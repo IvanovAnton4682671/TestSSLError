@@ -1,6 +1,9 @@
-﻿namespace TestSSLError.Server;
+﻿namespace TestSSLError.Server.Services;
 
-public class TCPServer : BackgroundService
+/// <summary>
+/// Отвечает за работу TCP-сервера
+/// </summary>
+internal class TCPServer : BackgroundService
 {
     private readonly ServerSettings _serverSettings;
     private readonly ILogger<TCPServer> _logger;
@@ -14,6 +17,10 @@ public class TCPServer : BackgroundService
         _sslErrorService = sslErrorService;
     }
 
+    /// <summary>
+    /// Основной цикл обработки входящих соединений
+    /// </summary>
+    /// <param name="cancellationToken">Токен отмены</param>
     protected override async Task ExecuteAsync(CancellationToken cancellationToken)
     {
         _tcpListener = new TcpListener(IPAddress.Any, _serverSettings.Port);
@@ -24,10 +31,10 @@ public class TCPServer : BackgroundService
         {
             try
             {
-                TcpClient client = await _tcpListener.AcceptTcpClientAsync(cancellationToken);
-                _logger.LogInformation("Соединение установлено: RemoteEndPoint={RemoteEndPoint}", client.Client.RemoteEndPoint);
+                TcpClient tcpClient = await _tcpListener.AcceptTcpClientAsync(cancellationToken);
+                _logger.LogInformation("Соединение установлено: RemoteEndPoint={RemoteEndPoint}", tcpClient.Client.RemoteEndPoint);
 
-                _ = Task.Run(() => _sslErrorService.HandleAsync(client, _serverSettings.WorkingMode, cancellationToken), cancellationToken);
+                _ = Task.Run(() => _sslErrorService.HandleAsync(tcpClient, _serverSettings.WorkingMode, cancellationToken), cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -40,6 +47,9 @@ public class TCPServer : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Освобождение ресурсов
+    /// </summary>
     public override void Dispose()
     {
         _tcpListener?.Stop();

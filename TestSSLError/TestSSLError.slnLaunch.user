@@ -8,7 +8,7 @@
         "DebugTarget": "TestSSLError.Server"
       },
       {
-        "Path": "TestSSLError.Api\\TestSSLError.Api.csproj",
+        "Path": "TestSSLError.Api\\TestSSLError.Client.csproj",
         "Action": "Start",
         "DebugTarget": "https"
       }

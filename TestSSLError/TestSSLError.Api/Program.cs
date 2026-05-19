@@ -1,4 +1,4 @@
-namespace TestSSLError.Api;
+namespace TestSSLError.Client;
 
 public class Program
 {
@@ -6,21 +6,16 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
-        // Конфигурация
-        builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
-
-        // Настройки клиента
         builder.Services.Configure<ClientSettings>(builder.Configuration.GetSection(ClientSettings.SectionName));
 
-        // Сервисы
-        builder.Services.AddSingleton<SSLErrorTestService>();
         builder.Services.AddControllers();
-
-        // Swagger
         builder.Services.AddEndpointsApiExplorer();
-        builder.Services.AddSwaggerGen(c =>
+        builder.Services.AddSwaggerGen();
+
+        builder.Services.AddHttpClient("TargetServerClient", (serviceProvider, client) =>
         {
-            c.SwaggerDoc("v1", new OpenApiInfo { Title = "SSL Error Client", Version = "v1" });
+            var settings = serviceProvider.GetRequiredService<IOptions<ClientSettings>>().Value;
+            client.Timeout = TimeSpan.FromSeconds(settings.RequestTimeoutSeconds);
         });
 
         var app = builder.Build();

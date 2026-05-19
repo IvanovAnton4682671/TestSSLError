@@ -5,7 +5,7 @@ VisualStudioVersion = 17.13.35806.99
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestSSLError.Server", "TestSSLError.Server\TestSSLError.Server.csproj", "{896E5817-08BF-4727-B90F-F378DBD3FD8C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestSSLError.Api", "TestSSLError.Api\TestSSLError.Api.csproj", "{86E1CFB9-8452-4B1E-A8F2-CCB957478F95}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestSSLError.Client", "TestSSLError.Api\TestSSLError.Client.csproj", "{86E1CFB9-8452-4B1E-A8F2-CCB957478F95}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
