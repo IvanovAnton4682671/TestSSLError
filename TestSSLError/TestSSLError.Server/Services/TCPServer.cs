@@ -8,7 +8,7 @@ internal class TCPServer : BackgroundService
     private readonly ServerSettings _serverSettings;
     private readonly ILogger<TCPServer> _logger;
     private readonly SSLErrorService _sslErrorService;
-    private TcpListener? _tcpListener;
+    private readonly List<Task> _listenerTasks = [];
 
     public TCPServer(IOptions<ServerSettings> serverSettings, ILogger<TCPServer> logger, SSLErrorService sslErrorService)
     {
@@ -23,36 +23,53 @@ internal class TCPServer : BackgroundService
     /// <param name="cancellationToken">Токен отмены</param>
     protected override async Task ExecuteAsync(CancellationToken cancellationToken)
     {
-        _tcpListener = new TcpListener(IPAddress.Any, _serverSettings.Port);
-        _tcpListener.Start();
-        _logger.LogInformation("Сервер запущен: Port={Port}, WorkingMode={WorkingMode}", _serverSettings.Port, _serverSettings.WorkingMode);
-
-        while (cancellationToken.IsCancellationRequested is false)
+        foreach (var endpoint in _serverSettings.EndpointsSettings)
         {
-            try
-            {
-                TcpClient tcpClient = await _tcpListener.AcceptTcpClientAsync(cancellationToken);
-                _logger.LogInformation("Соединение установлено: RemoteEndPoint={RemoteEndPoint}", tcpClient.Client.RemoteEndPoint);
+            var listener = new TcpListener(IPAddress.Any, endpoint.Port);
+            listener.Start();
+            _logger.LogInformation("Слушатель запущен: Port={Port}, WorkingMode={WorkingMode}", endpoint.Port, endpoint.WorkingMode);
 
-                _ = Task.Run(() => _sslErrorService.HandleAsync(tcpClient, _serverSettings.WorkingMode, cancellationToken), cancellationToken);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Произошла ошибка при работе сервера");
-            }
+            // Запускаем асинхронную задачу для этого порта
+            var task = ListenAsync(listener, endpoint.WorkingMode, cancellationToken);
+            _listenerTasks.Add(task);
         }
+
+        // Ждём завершения всех задач
+        await Task.WhenAll(_listenerTasks);
     }
 
-    /// <summary>
-    /// Освобождение ресурсов
-    /// </summary>
-    public override void Dispose()
+    private async Task ListenAsync(TcpListener listener, WorkingModes workingMode, CancellationToken cancellationToken)
     {
-        _tcpListener?.Stop();
-        base.Dispose();
+        try
+        {
+            while (cancellationToken.IsCancellationRequested is false)
+            {
+                TcpClient tcpClient;
+
+                try
+                {
+                    tcpClient = await listener.AcceptTcpClientAsync(cancellationToken);
+
+                    _logger.LogInformation("Подключение: {RemoteEndPoint}", tcpClient.Client.RemoteEndPoint);
+
+                    //Обрабатываем соединение без ожидания
+                    _ = Task.Run(() => _sslErrorService.HandleAsync(tcpClient, workingMode, cancellationToken), cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    _logger.LogInformation("Слушатель остановлен по CancellationToken: Port={Port}", ((IPEndPoint)listener.LocalEndpoint).Port);
+                    break;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в слушателе: Port={Port}", ((IPEndPoint)listener.LocalEndpoint).Port);
+        }
+        finally
+        {
+            listener.Stop();
+            _logger.LogInformation("Слушатель остановлен: Port={Port}", ((IPEndPoint)listener.LocalEndpoint).Port);
+        }
     }
 }

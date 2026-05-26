@@ -12,10 +12,15 @@ public class Program
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
 
+        // HttpClient без фиксированного адреса
         builder.Services.AddHttpClient("TargetServerClient", (serviceProvider, client) =>
         {
             var settings = serviceProvider.GetRequiredService<IOptions<ClientSettings>>().Value;
             client.Timeout = TimeSpan.FromSeconds(settings.RequestTimeoutSeconds);
+        })
+        .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = (sender, cert, chain, SslPolicyErrors) => true
         });
 
         var app = builder.Build();

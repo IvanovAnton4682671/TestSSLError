@@ -19,15 +19,18 @@ public class TestController : ControllerBase
     }
 
     /// <summary>
-    /// Тестовый GET-запрос к целевому TCP-серверу
+    /// Тестовый GET-запрос к целевому TCP-серверу на указанный порт
     /// </summary>
+    /// <param name="port">Порт целевого сервера</param>
     /// <param name="cancellationToken">Токен отмены</param>
     [HttpGet("request")]
-    public async Task<ActionResult> SendRequest(CancellationToken cancellationToken)
+    public async Task<ActionResult> SendRequest([FromQuery, Required, Range(1, 65535)] int port, CancellationToken cancellationToken)
     {
-        if (Uri.TryCreate(_clientSettings.TargetServerBaseUrl, UriKind.Absolute, out var uri) is false)
+        var requestUrl = $"{_clientSettings.TargetServerBaseUrl}:{port}/";
+
+        if (Uri.TryCreate(requestUrl, UriKind.Absolute, out var uri) is false)
         {
-            return BadRequest($"Некорректный URL в настройках: {_clientSettings.TargetServerBaseUrl}");
+            return BadRequest($"Некорректный URL: {requestUrl}");
         }
 
         HttpClient client = _httpClientFactory.CreateClient("TargetServerClient");
@@ -38,15 +41,21 @@ public class TestController : ControllerBase
 
             return Ok(new
             {
+                Port = port,
                 response.StatusCode,
                 Reason = response.ReasonPhrase
             });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Ошибка при отправке запроса к целевому серверу");
+            _logger.LogError(ex, "Ошибка при отправке запроса к целевому серверу: Port={Port}", port);
 
-            return StatusCode(500, $"Ошибка при отправке запроса: {ex.Message}");
+            return StatusCode(500, new
+            {
+                Port = port,
+                Error = ex.Message,
+                Type = ex.GetType().FullName
+            });
         }
     }
 }

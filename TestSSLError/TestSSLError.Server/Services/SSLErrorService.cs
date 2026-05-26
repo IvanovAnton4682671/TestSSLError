@@ -6,10 +6,12 @@
 internal class SSLErrorService
 {
     private readonly ILogger<SSLErrorService> _logger;
+    private readonly X509Certificate2 _serverCertificate;
 
-    public SSLErrorService(ILogger<SSLErrorService> logger)
+    public SSLErrorService(ILogger<SSLErrorService> logger, X509Certificate2 serverCertificate)
     {
         _logger = logger;
+        _serverCertificate = serverCertificate;
     }
 
     /// <summary>
@@ -25,8 +27,7 @@ internal class SSLErrorService
             switch (workingMode)
             {
                 case WorkingModes.Normal:
-                    _logger.LogInformation("Выбран нормальный режим работы сервера");
-                    tcpClient.Close();
+                    await HandleNormalAsync(tcpClient, cancellationToken);
                     break;
 
                 case WorkingModes.TimeoutOnConnect:
@@ -45,12 +46,82 @@ internal class SSLErrorService
     }
 
     /// <summary>
-    /// Обработка режима таймаута при запросе соединения
+    /// Ищет в данных последовательность, которая означает конец HTTP-заголовков
+    /// </summary>
+    /// <param name="data">Данные, в которых ищем конец заголовков</param>
+    /// <returns>true если нашли последовательность, иначе false</returns>
+    private static bool ContainsHeaderEnd(Span<byte> data)
+    {
+        // Ищем последовательность \r\n\r\n
+        for (int i = 0; i < data.Length - 3; i++)
+        {
+            if (data[i] == '\r'
+                && data[i + 1] == '\n'
+                && data[i + 2] == '\r'
+                && data[i + 3] == '\n')
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Обработка обычного режима: выполняем полный TLS handshake и отвечаем 200 OK
+    /// </summary>
+    /// <param name="tcpClient">Клиент, который устанавливает соединение</param>
+    /// <param name="ct">Токен отмены</param>
+    private async Task HandleNormalAsync(TcpClient tcpClient, CancellationToken ct)
+    {
+        _logger.LogInformation("Нормальный режим");
+
+        using var stream = tcpClient.GetStream();
+        using var sslStream = new SslStream(stream, false);
+
+        // Выполняем TLS handshake (серверная сторона)
+        await sslStream.AuthenticateAsServerAsync(
+            _serverCertificate,
+            clientCertificateRequired: false,
+            enabledSslProtocols: SslProtocols.Tls12 | SslProtocols.Tls13,
+            checkCertificateRevocation: false
+        );
+
+        _logger.LogInformation("TLS handshake завершён успешно");
+
+        // Читаем HTTP-запрос (до пустой строки, завершающей заголовки)
+        var buffer = new byte[4096];
+        int totalRead = 0;
+        while (totalRead < buffer.Length)
+        {
+            int bytesRead = await sslStream.ReadAsync(buffer.AsMemory(totalRead, buffer.Length - totalRead), ct);
+            if (bytesRead == 0)
+                break; // клиент закрыл соединение
+            totalRead += bytesRead;
+            // Проверяем, получили ли мы полный заголовок (пустая строка \r\n\r\n)
+            if (ContainsHeaderEnd(buffer.AsSpan(0, totalRead)))
+                break;
+        }
+
+        // Формируем простой HTTP-ответ
+        string response = "HTTP/1.1 200 OK\r\n" +
+                          "Content-Type: text/plain\r\n" +
+                          "Content-Length: 13\r\n" +
+                          "Connection: close\r\n" +
+                          "\r\n" +
+                          "Normal mode OK";
+        byte[] responseBytes = Encoding.ASCII.GetBytes(response);
+        await sslStream.WriteAsync(responseBytes, ct);
+        await sslStream.FlushAsync(ct);
+
+        tcpClient.Close();
+    }
+
+    /// <summary>
+    /// Обработка режима таймаута: сервер не отвечает на ClientHello от клиента,
+    /// а просто "зависает" пока не истечёт время ожидания клиента
     /// </summary>
     /// <param name="cancellationToken">Токен отмены</param>
     private async Task HandleTimeoutOnConnectAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Выбран режим таймаута");
+        _logger.LogInformation("Режим таймаута");
 
         try
         {
@@ -63,13 +134,14 @@ internal class SSLErrorService
     }
 
     /// <summary>
-    /// Обработка режима закрытия соединения после получения ClientHello от клиента
+    /// Обработка режима закрытия соединения: сервер закрывает соединение сразу после получения ClientHello от клиента,
+    /// из-за чего TLS handshake не завершается и клиент получает ошибку EOF
     /// </summary>
     /// <param name="tcpClient">Клиент, который устанавливает соединение</param>
     /// <param name="cancellationToken">Токен отмены</param>
     private async Task HandleEOFAfterClientHelloAsync(TcpClient tcpClient, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Выбран режим EOF");
+        _logger.LogInformation("Режим EOF");
 
         var stream = tcpClient.GetStream();
         var buffer = new byte[1024];

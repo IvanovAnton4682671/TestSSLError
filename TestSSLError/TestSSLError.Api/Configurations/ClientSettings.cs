@@ -13,10 +13,12 @@ public class ClientSettings
     /// <summary>
     /// Адрес целевого TCP-сервера
     /// </summary>
+    [Required(ErrorMessage = "Основной адрес целевого сервера обязателен")]
     public required string TargetServerBaseUrl { get; set; }
 
     /// <summary>
     /// Таймаут для запросов в секундах
     /// </summary>
+    [Required(ErrorMessage = "Таймаут для запросов обязателен")]
     public int RequestTimeoutSeconds { get; set; }
 }
