@@ -55,11 +55,10 @@ internal class SSLErrorService
         // Ищем последовательность \r\n\r\n
         for (int i = 0; i < data.Length - 3; i++)
         {
-            if (data[i] == '\r'
-                && data[i + 1] == '\n'
-                && data[i + 2] == '\r'
-                && data[i + 3] == '\n')
+            if (data[i] == '\r' && data[i + 1] == '\n' && data[i + 2] == '\r' && data[i + 3] == '\n')
+            {
                 return true;
+            }
         }
         return false;
     }
@@ -73,8 +72,8 @@ internal class SSLErrorService
     {
         _logger.LogInformation("Нормальный режим");
 
-        using var stream = tcpClient.GetStream();
-        using var sslStream = new SslStream(stream, false);
+        using NetworkStream stream = tcpClient.GetStream();
+        using SslStream sslStream = new SslStream(stream, false);
 
         // Выполняем TLS handshake (серверная сторона)
         await sslStream.AuthenticateAsServerAsync(
@@ -87,17 +86,25 @@ internal class SSLErrorService
         _logger.LogInformation("TLS handshake завершён успешно");
 
         // Читаем HTTP-запрос (до пустой строки, завершающей заголовки)
-        var buffer = new byte[4096];
+        byte[] buffer = new byte[4096];
         int totalRead = 0;
         while (totalRead < buffer.Length)
         {
             int bytesRead = await sslStream.ReadAsync(buffer.AsMemory(totalRead, buffer.Length - totalRead), ct);
+
+            // Клиент закрыл соединение
             if (bytesRead == 0)
-                break; // клиент закрыл соединение
+            {
+                break;
+            }
+
             totalRead += bytesRead;
+
             // Проверяем, получили ли мы полный заголовок (пустая строка \r\n\r\n)
             if (ContainsHeaderEnd(buffer.AsSpan(0, totalRead)))
+            {
                 break;
+            }
         }
 
         // Формируем простой HTTP-ответ
@@ -143,8 +150,8 @@ internal class SSLErrorService
     {
         _logger.LogInformation("Режим EOF");
 
-        var stream = tcpClient.GetStream();
-        var buffer = new byte[1024];
+        NetworkStream stream = tcpClient.GetStream();
+        byte[] buffer = new byte[1024];
 
         int bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
         _logger.LogInformation("Получено {Bytes} байт, закрытие соединения", bytesRead);

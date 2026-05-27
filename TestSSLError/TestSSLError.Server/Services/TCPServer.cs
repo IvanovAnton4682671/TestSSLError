@@ -23,14 +23,14 @@ internal class TCPServer : BackgroundService
     /// <param name="cancellationToken">Токен отмены</param>
     protected override async Task ExecuteAsync(CancellationToken cancellationToken)
     {
-        foreach (var endpoint in _serverSettings.EndpointsSettings)
+        foreach (EndpointsSettings endpoint in _serverSettings.EndpointsSettings)
         {
-            var listener = new TcpListener(IPAddress.Any, endpoint.Port);
+            TcpListener listener = new TcpListener(IPAddress.Any, endpoint.Port);
             listener.Start();
             _logger.LogInformation("Слушатель запущен: Port={Port}, WorkingMode={WorkingMode}", endpoint.Port, endpoint.WorkingMode);
 
             // Запускаем асинхронную задачу для этого порта
-            var task = ListenAsync(listener, endpoint.WorkingMode, cancellationToken);
+            Task task = ListenAsync(listener, endpoint.WorkingMode, cancellationToken);
             _listenerTasks.Add(task);
         }
 

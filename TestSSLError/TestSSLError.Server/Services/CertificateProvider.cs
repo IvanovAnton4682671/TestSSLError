@@ -11,8 +11,8 @@ internal static class CertificateProvider
     /// <returns>Сертификат</returns>
     public static X509Certificate2 GetOrCreateCertficate()
     {
-        using var rsa = RSA.Create(2048);
-        var request = new CertificateRequest("CN=TestSSLError", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        using RSA rsa = RSA.Create(2048);
+        CertificateRequest request = new CertificateRequest("CN=TestSSLError", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
 
         request.CertificateExtensions.Add(
             new X509EnhancedKeyUsageExtension(
@@ -21,7 +21,7 @@ internal static class CertificateProvider
             )
         );
 
-        var certificate = request.CreateSelfSigned(
+        X509Certificate2 certificate = request.CreateSelfSigned(
             DateTimeOffset.Now.AddDays(-1),
             DateTimeOffset.Now.AddYears(1)
         );

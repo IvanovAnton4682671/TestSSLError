@@ -4,7 +4,7 @@ public class Program
 {
     public static void Main(string[] args)
     {
-        var builder = WebApplication.CreateBuilder(args);
+        WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
         builder.Services.Configure<ClientSettings>(builder.Configuration.GetSection(ClientSettings.SectionName));
 
@@ -15,7 +15,7 @@ public class Program
         // HttpClient без фиксированного адреса
         builder.Services.AddHttpClient("TargetServerClient", (serviceProvider, client) =>
         {
-            var settings = serviceProvider.GetRequiredService<IOptions<ClientSettings>>().Value;
+            ClientSettings settings = serviceProvider.GetRequiredService<IOptions<ClientSettings>>().Value;
             client.Timeout = TimeSpan.FromSeconds(settings.RequestTimeoutSeconds);
         })
         .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
@@ -23,7 +23,7 @@ public class Program
             ServerCertificateCustomValidationCallback = (sender, cert, chain, SslPolicyErrors) => true
         });
 
-        var app = builder.Build();
+        WebApplication app = builder.Build();
 
         app.UseSwagger();
         app.UseSwaggerUI();

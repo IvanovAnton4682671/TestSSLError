@@ -26,7 +26,7 @@ public class TestController : ControllerBase
     [HttpGet("request")]
     public async Task<ActionResult> SendRequest([FromQuery, Required, Range(1, 65535)] int port, CancellationToken cancellationToken)
     {
-        var requestUrl = $"{_clientSettings.TargetServerBaseUrl}:{port}/";
+        string requestUrl = $"{_clientSettings.TargetServerBaseUrl}:{port}/";
 
         if (Uri.TryCreate(requestUrl, UriKind.Absolute, out var uri) is false)
         {
