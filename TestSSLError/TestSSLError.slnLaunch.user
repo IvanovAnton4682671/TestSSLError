@@ -1,6 +1,6 @@
 [
   {
-    "Name": "New Profile",
+    "Name": "Client, Proxy, Server",
     "Projects": [
       {
         "Path": "TestSSLError.Server\\TestSSLError.Server.csproj",
@@ -11,6 +11,11 @@
         "Path": "TestSSLError.Api\\TestSSLError.Client.csproj",
         "Action": "Start",
         "DebugTarget": "https"
+      },
+      {
+        "Path": "TestSSLError.Proxy\\TestSSLError.Proxy.csproj",
+        "Action": "Start",
+        "DebugTarget": "TestSSLError.Proxy"
       }
     ]
   }

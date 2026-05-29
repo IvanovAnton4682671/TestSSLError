@@ -1,0 +1,9 @@
+﻿global using Microsoft.Extensions.DependencyInjection;
+global using Microsoft.Extensions.Hosting;
+global using Microsoft.Extensions.Logging;
+global using Microsoft.Extensions.Options;
+global using System.ComponentModel.DataAnnotations;
+global using System.Net;
+global using System.Net.Sockets;
+global using TestSSLError.Proxy.Configurations;
+global using TestSSLError.Proxy.Services;

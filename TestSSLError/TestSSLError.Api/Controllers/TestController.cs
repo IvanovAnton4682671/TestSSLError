@@ -26,14 +26,23 @@ public class TestController : ControllerBase
     [HttpGet("request")]
     public async Task<ActionResult> SendRequest([FromQuery, Required, Range(1, 65535)] int port, CancellationToken cancellationToken)
     {
-        string requestUrl = $"{_clientSettings.TargetServerBaseUrl}:{port}/";
+        // Ищем эндпоинт по порту
+        EndpointsSettings? endpoint = _clientSettings.EndpointsSettings.FirstOrDefault(e => e.Port == port);
+        if (endpoint == null)
+        {
+            return BadRequest($"Port={port} не найден в конфигурации клиента. Доступные порты: " +
+                $"{string.Join(", ", _clientSettings.EndpointsSettings.Select(e => e.Port))}"
+            );
+        }
+
+        string requestUrl = $"{endpoint.BaseUrl.TrimEnd('/')}/";
 
         if (Uri.TryCreate(requestUrl, UriKind.Absolute, out var uri) is false)
         {
             return BadRequest($"Некорректный URL: {requestUrl}");
         }
 
-        HttpClient client = _httpClientFactory.CreateClient("TargetServerClient");
+        HttpClient client = _httpClientFactory.CreateClient("TargetClient");
 
         try
         {
@@ -42,17 +51,19 @@ public class TestController : ControllerBase
             return Ok(new
             {
                 Port = port,
+                Url = requestUrl,
                 response.StatusCode,
                 Reason = response.ReasonPhrase
             });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Ошибка при отправке запроса к целевому серверу: Port={Port}", port);
+            _logger.LogError(ex, "Ошибка при отправке запроса по Url={Url}", requestUrl);
 
             return StatusCode(500, new
             {
                 Port = port,
+                Url = requestUrl,
                 Error = ex.Message,
                 Type = ex.GetType().FullName
             });

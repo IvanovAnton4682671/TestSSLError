@@ -13,7 +13,7 @@ public class Program
         builder.Services.AddSwaggerGen();
 
         // HttpClient без фиксированного адреса
-        builder.Services.AddHttpClient("TargetServerClient", (serviceProvider, client) =>
+        builder.Services.AddHttpClient("TargetClient", (serviceProvider, client) =>
         {
             ClientSettings settings = serviceProvider.GetRequiredService<IOptions<ClientSettings>>().Value;
             client.Timeout = TimeSpan.FromSeconds(settings.RequestTimeoutSeconds);

@@ -11,14 +11,14 @@ public class ClientSettings
     public const string SectionName = "ClientSettings";
 
     /// <summary>
-    /// Адрес целевого TCP-сервера
-    /// </summary>
-    [Required(ErrorMessage = "Основной адрес целевого сервера обязателен")]
-    public required string TargetServerBaseUrl { get; set; }
-
-    /// <summary>
     /// Таймаут для запросов в секундах
     /// </summary>
     [Required(ErrorMessage = "Таймаут для запросов обязателен")]
     public int RequestTimeoutSeconds { get; set; }
+
+    /// <summary>
+    /// Список настроек для конечных точек подключения (сервер и прокси)
+    /// </summary>
+    [Required(ErrorMessage = "Настройки конечных точек обязательны")]
+    public required List<EndpointsSettings> EndpointsSettings { get; set; }
 }
