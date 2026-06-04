@@ -13,9 +13,8 @@ internal class MappingPorts
     public int ListenPort { get; set; }
 
     /// <summary>
-    /// Порт на который прокси пересылает данные (сервер)
+    /// Режим работы эндпоинта
     /// </summary>
-    [Range(1, 65535, ErrorMessage = "Порт сервера должен быть в диапазоне от 1 до 65535")]
-    [Required(ErrorMessage = "Порт сервера обязателен")]
-    public int TargetPort { get; set; }
+    [Required(ErrorMessage = "Режим работы обязателен")]
+    public WorkingModes WorkingMode { get; set; }
 }

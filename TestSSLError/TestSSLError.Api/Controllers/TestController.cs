@@ -7,21 +7,21 @@ namespace TestSSLError.Client.Controllers;
 [Route("api/[controller]")]
 public class TestController : ControllerBase
 {
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ClientSettings _clientSettings;
     private readonly ILogger<TestController> _logger;
+    private readonly ClientSettings _clientSettings;
+    private readonly IHttpClientFactory _httpClientFactory;
 
-    public TestController(IHttpClientFactory httpClientFactory, IOptions<ClientSettings> clientSettings, ILogger<TestController> logger)
+    public TestController(ILogger<TestController> logger, IOptions<ClientSettings> clientSettings, IHttpClientFactory httpClientFactory)
     {
-        _httpClientFactory = httpClientFactory;
-        _clientSettings = clientSettings.Value;
         _logger = logger;
+        _clientSettings = clientSettings.Value;
+        _httpClientFactory = httpClientFactory;
     }
 
     /// <summary>
-    /// Тестовый GET-запрос к целевому TCP-серверу на указанный порт
+    /// Тестовый GET-запрос через порт прокси на целевой TCP-сервер
     /// </summary>
-    /// <param name="port">Порт целевого сервера</param>
+    /// <param name="port">Порт прокси</param>
     /// <param name="cancellationToken">Токен отмены</param>
     [HttpGet("request")]
     public async Task<ActionResult> SendRequest([FromQuery, Required, Range(1, 65535)] int port, CancellationToken cancellationToken)

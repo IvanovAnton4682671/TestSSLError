@@ -10,7 +10,7 @@ internal class Program
                 services.Configure<ServerSettings>(hostContext.Configuration.GetSection(ServerSettings.SectionName));
 
                 services.AddSingleton(_ => CertificateProvider.GetOrCreateCertficate());
-                services.AddSingleton<SSLErrorService>();
+                services.AddSingleton<TCPHandler>();
                 services.AddHostedService<TCPServer>();
             })
             .Build()

@@ -6,4 +6,5 @@ global using System.ComponentModel.DataAnnotations;
 global using System.Net;
 global using System.Net.Sockets;
 global using TestSSLError.Proxy.Configurations;
+global using TestSSLError.Proxy.Enums;
 global using TestSSLError.Proxy.Services;

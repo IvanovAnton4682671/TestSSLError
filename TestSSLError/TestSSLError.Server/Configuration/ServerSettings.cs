@@ -11,8 +11,9 @@ internal class ServerSettings
     public const string SectionName = "ServerSettings";
 
     /// <summary>
-    /// Настройки эндпоинтов сервера
+    /// Порт, по которому сервер принимает соединения
     /// </summary>
-    [Required(ErrorMessage = "Настройки эндпоинтов обязательны")]
-    public required List<EndpointsSettings> EndpointsSettings { get; set; }
+    [Range(1, 65535, ErrorMessage = "Порт должен быть в диапазоне от 1 до 65535")]
+    [Required(ErrorMessage = "Порт обязателен")]
+    public int Port { get; set; }
 }

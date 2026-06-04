@@ -26,7 +26,7 @@ internal class TCPProxyService : BackgroundService
             TcpListener tcpListener = new TcpListener(IPAddress.Any, mappingPorts.ListenPort);
             tcpListener.Start();
             _logger.LogInformation("Прокси-слушатель запущен: {ListenPort} -> {TargetHost}:{TargetPort}",
-                mappingPorts.ListenPort, _proxySettings.TargetHost, mappingPorts.TargetPort
+                mappingPorts.ListenPort, _proxySettings.TargetHost, _proxySettings.TargetPort
             );
 
             _listenerTasks.Add(ListenAsync(tcpListener, mappingPorts, cancellationToken));
@@ -53,12 +53,12 @@ internal class TCPProxyService : BackgroundService
                 {
                     tcpClient = await tcpListener.AcceptTcpClientAsync(cancellationToken);
                     _logger.LogInformation("Установлено соединение с клиентом: ListenPort={ListenPort}", mappingPorts.ListenPort);
-                    _ = HandleConnection(tcpClient, mappingPorts, cancellationToken);
+                    _ = HandleConnectionAsync(tcpClient, mappingPorts, cancellationToken);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
                     _logger.LogInformation("Отмена соединения по токену: {ListenPort} -> {TargetHost}:{TargetPort}",
-                        mappingPorts.ListenPort, _proxySettings.TargetHost, mappingPorts.TargetPort
+                        mappingPorts.ListenPort, _proxySettings.TargetHost, _proxySettings.TargetPort
                     );
                     break;
                 }
@@ -76,30 +76,94 @@ internal class TCPProxyService : BackgroundService
     /// <param name="tcpClient">Клиент, с которым уже установлено соединение</param>
     /// <param name="mappingPorts">Пара портов для данного соединения</param>
     /// <param name="cancellationToken">Токен отмены</param>
-    private async Task HandleConnection(TcpClient tcpClient, MappingPorts mappingPorts, CancellationToken cancellationToken)
+    private async Task HandleConnectionAsync(TcpClient tcpClient, MappingPorts mappingPorts, CancellationToken cancellationToken)
     {
         try
         {
-            using TcpClient target = new TcpClient();
-            await target.ConnectAsync(_proxySettings.TargetHost, mappingPorts.TargetPort, cancellationToken);
+            switch (mappingPorts.WorkingMode)
+            {
+                case WorkingModes.Normal:
+                    await ProxyToServerAsync(tcpClient, cancellationToken);
+                    break;
 
-            using NetworkStream clientStream = tcpClient.GetStream();
-            using NetworkStream targetStream = target.GetStream();
+                case WorkingModes.EOFAfterClientHello:
+                    await HandleEOFAfterClientHelloAsync(tcpClient, cancellationToken);
+                    break;
 
-            Task clientTask = clientStream.CopyToAsync(targetStream, cancellationToken);
-            Task targetTask = targetStream.CopyToAsync(clientStream, cancellationToken);
-
-            await Task.WhenAny(clientTask, targetTask);
+                case WorkingModes.TimeoutOnConnect:
+                    await HandleTimeoutOnConnectAsync(cancellationToken);
+                    break;
+            }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Ошибка при проксировании соединения: {ListenPort} -> {TargetHost}:{TargetPort}",
-                mappingPorts.ListenPort, _proxySettings.TargetHost, mappingPorts.TargetPort
+                mappingPorts.ListenPort, _proxySettings.TargetHost, _proxySettings.TargetPort
             );
         }
         finally
         {
             tcpClient.Close();
+        }
+    }
+
+    /// <summary>
+    /// Обработка соединения между клиентом и сервером
+    /// </summary>
+    /// <param name="tcpClient">Клиент, с которым уже установлено соединение</param>
+    /// <param name="cancellationToken">Токен отмены</param>
+    private async Task ProxyToServerAsync(TcpClient tcpClient, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Режим нормального проксирования");
+
+        using TcpClient target = new TcpClient();
+        await target.ConnectAsync(_proxySettings.TargetHost, _proxySettings.TargetPort, cancellationToken);
+
+        using NetworkStream clientStream = tcpClient.GetStream();
+        using NetworkStream targetStream = target.GetStream();
+
+        Task clientTask = clientStream.CopyToAsync(targetStream, cancellationToken);
+        Task targetTask = targetStream.CopyToAsync(clientStream, cancellationToken);
+
+        await Task.WhenAny(clientTask, targetTask);
+    }
+
+    /// <summary>
+    /// Обработка режима закрытия соединения: прокси закрывает соединение сразу после получения ClientHello от клиента,
+    /// из-за чего TLS handshake не завершается и клиент получает ошибку EOF
+    /// </summary>
+    /// <param name="tcpClient">Клиент, который устанавливает соединение</param>
+    /// <param name="cancellationToken">Токен отмены</param>
+    private async Task HandleEOFAfterClientHelloAsync(TcpClient tcpClient, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Режим EOF");
+
+        NetworkStream stream = tcpClient.GetStream();
+        byte[] buffer = new byte[1024];
+
+        int bytesRead = await stream.ReadAsync(buffer, cancellationToken);
+        _logger.LogInformation("Получено {Bytes} байт, закрытие соединения", bytesRead);
+
+        stream.Close();
+        tcpClient.Close();
+    }
+
+    /// <summary>
+    /// Обработка режима таймаута: прокси не отвечает на ClientHello от клиента,
+    /// а просто "зависает" пока не истечёт время ожидания клиента
+    /// </summary>
+    /// <param name="cancellationToken">Токен отмены</param>
+    private async Task HandleTimeoutOnConnectAsync(CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Режим таймаута");
+
+        try
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("Время симуляции таймаута истекло по токену");
         }
     }
 }
