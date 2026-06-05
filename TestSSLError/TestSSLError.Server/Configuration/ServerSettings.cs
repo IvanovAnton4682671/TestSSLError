@@ -14,6 +14,6 @@ internal class ServerSettings
     /// Порт, по которому сервер принимает соединения
     /// </summary>
     [Range(1, 65535, ErrorMessage = "Порт должен быть в диапазоне от 1 до 65535")]
-    [Required(ErrorMessage = "Порт обязателен")]
+    [Required(ErrorMessage = "Порт сервера обязателен")]
     public int Port { get; set; }
 }

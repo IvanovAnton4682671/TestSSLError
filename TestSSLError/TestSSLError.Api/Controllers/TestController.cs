@@ -8,12 +8,19 @@ namespace TestSSLError.Client.Controllers;
 public class TestController : ControllerBase
 {
     private readonly ILogger<TestController> _logger;
+    private readonly List<EndpointsSettings> _endpointsSettings;
     private readonly ClientSettings _clientSettings;
     private readonly IHttpClientFactory _httpClientFactory;
 
-    public TestController(ILogger<TestController> logger, IOptions<ClientSettings> clientSettings, IHttpClientFactory httpClientFactory)
+    public TestController(
+        ILogger<TestController> logger,
+        IOptions<List<EndpointsSettings>> endpointsSettings,
+        IOptions<ClientSettings> clientSettings,
+        IHttpClientFactory httpClientFactory
+    )
     {
         _logger = logger;
+        _endpointsSettings = endpointsSettings.Value;
         _clientSettings = clientSettings.Value;
         _httpClientFactory = httpClientFactory;
     }
@@ -27,11 +34,11 @@ public class TestController : ControllerBase
     public async Task<ActionResult> SendRequest([FromQuery, Required, Range(1, 65535)] int port, CancellationToken cancellationToken)
     {
         // Ищем эндпоинт по порту
-        EndpointsSettings? endpoint = _clientSettings.EndpointsSettings.FirstOrDefault(e => e.Port == port);
+        EndpointsSettings? endpoint = _endpointsSettings.FirstOrDefault(e => e.Port == port);
         if (endpoint == null)
         {
             return BadRequest($"Port={port} не найден в конфигурации клиента. Доступные порты: " +
-                $"{string.Join(", ", _clientSettings.EndpointsSettings.Select(e => e.Port))}"
+                $"{string.Join(", ", _endpointsSettings.Select(e => e.Port))}"
             );
         }
 

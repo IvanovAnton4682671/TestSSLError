@@ -9,7 +9,8 @@ internal class Program
             {
                 services.Configure<ProxySettings>(context.Configuration.GetSection(ProxySettings.SectionName));
 
-                services.AddHostedService<TCPProxyService>();
+                services.AddSingleton<TCPHandler>();
+                services.AddHostedService<TCPProxy>();
             })
             .Build();
 

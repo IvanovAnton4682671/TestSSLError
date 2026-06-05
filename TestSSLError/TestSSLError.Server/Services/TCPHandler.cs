@@ -15,7 +15,7 @@ internal class TCPHandler
     }
 
     /// <summary>
-    /// Обработка запроса: выполняем полный TLS handshake и отвечаем 200 OK
+    /// Обработка запроса: выполняет полный TLS handshake и отвечает 200 OK
     /// </summary>
     /// <param name="tcpClient">Клиент, который устанавливает соединение</param>
     /// <param name="cancellationToken">Токен отмены</param>
@@ -25,8 +25,8 @@ internal class TCPHandler
         {
             _logger.LogInformation("Начало обработки запроса");
 
-            using NetworkStream stream = tcpClient.GetStream();
-            using SslStream sslStream = new SslStream(stream, false);
+            using NetworkStream networkStream = tcpClient.GetStream();
+            using SslStream sslStream = new SslStream(networkStream, false);
 
             // Выполняем TLS handshake
             await sslStream.AuthenticateAsServerAsync(

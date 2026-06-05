@@ -15,10 +15,4 @@ public class ClientSettings
     /// </summary>
     [Required(ErrorMessage = "Таймаут для запросов обязателен")]
     public int RequestTimeoutSeconds { get; set; }
-
-    /// <summary>
-    /// Список настроек для конечных точек подключения (сервер и прокси)
-    /// </summary>
-    [Required(ErrorMessage = "Настройки конечных точек обязательны")]
-    public required List<EndpointsSettings> EndpointsSettings { get; set; }
 }

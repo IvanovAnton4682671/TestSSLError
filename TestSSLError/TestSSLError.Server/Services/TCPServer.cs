@@ -22,8 +22,8 @@ internal class TCPServer : BackgroundService
     /// <param name="cancellationToken">Токен отмены</param>
     protected override async Task ExecuteAsync(CancellationToken cancellationToken)
     {
-        TcpListener listener = new TcpListener(IPAddress.Any, _serverSettings.Port);
-        listener.Start();
+        TcpListener tcpListener = new TcpListener(IPAddress.Any, _serverSettings.Port);
+        tcpListener.Start();
         _logger.LogInformation("Слушатель запущен: Port={Port}", _serverSettings.Port);
 
         try
@@ -34,7 +34,7 @@ internal class TCPServer : BackgroundService
 
                 try
                 {
-                    tcpClient = await listener.AcceptTcpClientAsync(cancellationToken);
+                    tcpClient = await tcpListener.AcceptTcpClientAsync(cancellationToken);
 
                     _logger.LogInformation("Подключение: {RemoteEndPoint}", tcpClient.Client.RemoteEndPoint);
 
@@ -54,7 +54,7 @@ internal class TCPServer : BackgroundService
         }
         finally
         {
-            listener.Stop();
+            tcpListener.Stop();
             _logger.LogInformation("Слушатель остановлен: Port={Port}", _serverSettings.Port);
         }
     }

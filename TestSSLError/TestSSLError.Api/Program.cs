@@ -6,6 +6,7 @@ public class Program
     {
         WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
+        builder.Services.Configure<List<EndpointsSettings>>(builder.Configuration.GetSection(EndpointsSettings.SectionName));
         builder.Services.Configure<ClientSettings>(builder.Configuration.GetSection(ClientSettings.SectionName));
 
         builder.Services.AddControllers();
@@ -15,8 +16,8 @@ public class Program
         // HttpClient без фиксированного адреса
         builder.Services.AddHttpClient("TargetClient", (serviceProvider, client) =>
         {
-            ClientSettings settings = serviceProvider.GetRequiredService<IOptions<ClientSettings>>().Value;
-            client.Timeout = TimeSpan.FromSeconds(settings.RequestTimeoutSeconds);
+            ClientSettings clientSettings = serviceProvider.GetRequiredService<IOptions<ClientSettings>>().Value;
+            client.Timeout = TimeSpan.FromSeconds(clientSettings.RequestTimeoutSeconds);
         })
         .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
         {

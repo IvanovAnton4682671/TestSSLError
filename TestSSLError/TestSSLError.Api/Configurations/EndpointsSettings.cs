@@ -6,6 +6,11 @@
 public class EndpointsSettings
 {
     /// <summary>
+    /// Название секции в конфигурационном файле (нужно для корректного получения конфигурации)
+    /// </summary>
+    public const string SectionName = "EndpointsSettings";
+
+    /// <summary>
     /// Порт, на который мы хотим отправить запрос (прокси)
     /// </summary>
     [Range(1, 65535, ErrorMessage = "Порт должен быть в диапазоне от 1 до 65535")]
