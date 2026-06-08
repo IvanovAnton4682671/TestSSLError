@@ -1,21 +1,18 @@
 [
   {
-    "Name": "Client, Proxy, Server",
+    "Name": "Server, Proxy, Client",
     "Projects": [
       {
         "Path": "TestSSLError.Server\\TestSSLError.Server.csproj",
-        "Action": "Start",
-        "DebugTarget": "TestSSLError.Server"
+        "Action": "Start"
       },
       {
-        "Path": "TestSSLError.Api\\TestSSLError.Client.csproj",
-        "Action": "Start",
-        "DebugTarget": "https"
+        "Path": "TestSSLError.Client\\TestSSLError.Client.csproj",
+        "Action": "Start"
       },
       {
         "Path": "TestSSLError.Proxy\\TestSSLError.Proxy.csproj",
-        "Action": "Start",
-        "DebugTarget": "TestSSLError.Proxy"
+        "Action": "Start"
       }
     ]
   }

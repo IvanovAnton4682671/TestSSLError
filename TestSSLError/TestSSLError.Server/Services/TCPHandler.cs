@@ -1,34 +1,36 @@
 ﻿namespace TestSSLError.Server.Services;
 
 /// <summary>
-/// Отвечает за обработку соединения
+/// Отвечает за обработку одного клиентского соединения.
+/// Поддерживает Keep-Alive, лимит запросов и idle-таймаут.
 /// </summary>
 internal class TCPHandler
 {
     private readonly ILogger<TCPHandler> _logger;
     private readonly X509Certificate2 _serverCertificate;
+    private readonly ServerSettings _settings;
 
-    public TCPHandler(ILogger<TCPHandler> logger, X509Certificate2 serverCertificate)
+    public TCPHandler(ILogger<TCPHandler> logger, X509Certificate2 serverCertificate, IOptions<ServerSettings> settings)
     {
         _logger = logger;
         _serverCertificate = serverCertificate;
+        _settings = settings.Value;
     }
 
     /// <summary>
-    /// Обработка запроса: выполняет полный TLS handshake и отвечает 200 OK
+    /// Обработка соединения: TLS handshake, цикл приёма запросов и отправки ответов.
     /// </summary>
-    /// <param name="tcpClient">Клиент, который устанавливает соединение</param>
-    /// <param name="cancellationToken">Токен отмены</param>
     public async Task HandleAsync(TcpClient tcpClient, CancellationToken cancellationToken)
     {
+        using var _ = tcpClient;
         try
         {
-            _logger.LogInformation("Начало обработки запроса");
+            _logger.LogInformation("Начало обработки нового клиента");
 
-            using NetworkStream networkStream = tcpClient.GetStream();
-            using SslStream sslStream = new SslStream(networkStream, false);
+            using var networkStream = tcpClient.GetStream();
+            using var sslStream = new SslStream(networkStream, false);
 
-            // Выполняем TLS handshake
+            // TLS handshake
             await sslStream.AuthenticateAsServerAsync(
                 _serverCertificate,
                 clientCertificateRequired: false,
@@ -38,55 +40,135 @@ internal class TCPHandler
 
             _logger.LogInformation("TLS handshake завершён успешно");
 
-            // Читаем HTTP-запрос (до пустой строки, завершающей заголовки)
-            byte[] buffer = new byte[4096];
-            int totalRead = 0;
-            while (totalRead < buffer.Length)
-            {
-                int bytesRead = await sslStream.ReadAsync(buffer.AsMemory(totalRead, buffer.Length - totalRead), cancellationToken);
+            // Цикл обработки запросов
+            int requestCount = 0;
+            bool keepAlive = _settings.EnableKeepAlive;
+            var idleCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-                // Клиент закрыл соединение
-                if (bytesRead == 0)
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                // Сброс таймаута бездействия перед чтением следующего запроса
+                if (_settings.IdleTimeoutSeconds.HasValue)
                 {
+                    idleCts.CancelAfter(TimeSpan.FromSeconds(_settings.IdleTimeoutSeconds.Value));
+                }
+
+                // Чтение HTTP-запроса (заголовки до \r\n\r\n)
+                byte[] buffer = new byte[8192];
+                int totalRead = 0;
+                bool headerEndFound = false;
+
+                try
+                {
+                    while (totalRead < buffer.Length)
+                    {
+                        int bytesRead = await sslStream.ReadAsync(
+                            buffer.AsMemory(totalRead, buffer.Length - totalRead),
+                            idleCts.Token
+                        );
+
+                        if (bytesRead == 0)
+                        {
+                            // Клиент закрыл соединение
+                            _logger.LogDebug("Клиент закрыл соединение");
+                            return;
+                        }
+
+                        totalRead += bytesRead;
+
+                        // Ищем конец заголовков \r\n\r\n
+                        for (int i = 0; i < totalRead - 3; i++)
+                        {
+                            if (buffer[i] == '\r' && buffer[i + 1] == '\n' &&
+                                buffer[i + 2] == '\r' && buffer[i + 3] == '\n')
+                            {
+                                headerEndFound = true;
+                                break;
+                            }
+                        }
+
+                        if (headerEndFound)
+                            break;
+                    }
+                }
+                catch (OperationCanceledException) when (idleCts.IsCancellationRequested)
+                {
+                    _logger.LogWarning("Idle timeout, закрытие соединения");
                     break;
                 }
 
-                totalRead += bytesRead;
-
-                // Проверяем, получили ли мы полный заголовок (пустая строка \r\n\r\n)
-                bool headerEndFound = false;
-                for (int i = 0; i < totalRead - 3; i++)
+                if (!headerEndFound)
                 {
-                    if (buffer[i] == '\r' && buffer[i + 1] == '\n' && buffer[i + 2] == '\r' && buffer[i + 3] == '\n')
+                    _logger.LogWarning("Не удалось прочитать корректный HTTP-запрос, закрытие соединения");
+                    break;
+                }
+
+                requestCount++;
+                _logger.LogInformation("Запрос #{RequestCount} получен", requestCount);
+
+                // Определяем, хочет ли клиент закрыть соединение
+                bool clientCloseRequested = CheckClientConnectionClose(buffer, totalRead);
+
+                // Формируем ответ
+                string responseBody = "OK";
+                var sb = new StringBuilder();
+                sb.AppendLine("HTTP/1.1 200 OK");
+                sb.AppendLine("Content-Type: text/plain");
+                sb.AppendLine($"Content-Length: {responseBody.Length}");
+
+                // Решаем, закрывать соединение после этого ответа
+                bool shouldClose = !keepAlive || clientCloseRequested ||
+                                   (_settings.MaxRequestsPerConnection.HasValue &&
+                                    requestCount >= _settings.MaxRequestsPerConnection.Value);
+
+                if (shouldClose)
+                {
+                    sb.AppendLine("Connection: close");
+                }
+                else
+                {
+                    sb.AppendLine("Connection: keep-alive");
+                    if (_settings.KeepAliveTimeoutSeconds.HasValue)
                     {
-                        headerEndFound = true;
-                        break;
+                        sb.AppendLine($"Keep-Alive: timeout={_settings.KeepAliveTimeoutSeconds}");
                     }
                 }
 
-                if (headerEndFound)
+                sb.AppendLine(); // пустая строка
+                sb.Append(responseBody);
+
+                byte[] responseBytes = Encoding.ASCII.GetBytes(sb.ToString());
+                await sslStream.WriteAsync(responseBytes, cancellationToken);
+                await sslStream.FlushAsync(cancellationToken);
+
+                // Если нужно закрыть – выходим из цикла
+                if (shouldClose)
                 {
+                    _logger.LogInformation("Закрытие соединения после {RequestCount} запросов", requestCount);
                     break;
                 }
             }
-
-            // Формируем простой HTTP-ответ
-            string responseBody = "OK";
-            string response = "HTTP/1.1 200 OK\r\n" +
-                              "Content-Type: text/plain\r\n" +
-                              $"Content-Length: {responseBody.Length}\r\n" +
-                              "Connection: close\r\n" +
-                              "\r\n" +
-                              responseBody;
-            byte[] responseBytes = Encoding.ASCII.GetBytes(response);
-            await sslStream.WriteAsync(responseBytes, cancellationToken);
-            await sslStream.FlushAsync(cancellationToken);
-
-            tcpClient.Close();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Произошла ошибка при обработке соединения");
+            _logger.LogError(ex, "Ошибка при обработке соединения");
         }
+        finally
+        {
+            tcpClient.Close();
+            _logger.LogInformation("Соединение закрыто");
+        }
+    }
+
+    /// <summary>
+    /// Проверяет, есть ли в заголовках запроса "Connection: close"
+    /// </summary>
+    private static bool CheckClientConnectionClose(byte[] buffer, int length)
+    {
+        string headerPart = Encoding.ASCII.GetString(buffer, 0, length);
+        // Ищем "Connection: close" (регистронезависимо)
+        const string pattern = "connection: close";
+        int idx = headerPart.IndexOf(pattern, StringComparison.OrdinalIgnoreCase);
+        return idx >= 0;
     }
 }

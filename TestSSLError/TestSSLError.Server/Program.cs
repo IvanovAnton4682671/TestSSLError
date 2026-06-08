@@ -8,7 +8,6 @@ internal class Program
             .ConfigureServices((hostContext, services) =>
             {
                 services.Configure<ServerSettings>(hostContext.Configuration.GetSection(ServerSettings.SectionName));
-
                 services.AddSingleton(_ => CertificateProvider.GetOrCreateCertficate());
                 services.AddSingleton<TCPHandler>();
                 services.AddHostedService<TCPServer>();

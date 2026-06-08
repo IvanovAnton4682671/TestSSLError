@@ -1,14 +1,7 @@
 ﻿namespace TestSSLError.Server.Services;
 
-/// <summary>
-/// Отвечает за работу с сертификатом
-/// </summary>
 internal static class CertificateProvider
 {
-    /// <summary>
-    /// Создаёт (если ещё не создан) сертификат и возвращает его
-    /// </summary>
-    /// <returns>Сертификат</returns>
     public static X509Certificate2 GetOrCreateCertficate()
     {
         using RSA rsa = RSA.Create(2048);

@@ -1,18 +1,18 @@
 namespace TestSSLError.Client.Configurations;
 
-/// <summary>
-/// Настройки клиента
-/// </summary>
 public class ClientSettings
 {
-    /// <summary>
-    /// Название секции в конфигурационном файле (нужно для корректного получения конфигурации)
-    /// </summary>
     public const string SectionName = "ClientSettings";
 
-    /// <summary>
-    /// Таймаут для запросов в секундах
-    /// </summary>
-    [Required(ErrorMessage = "Таймаут для запросов обязателен")]
+    [Range(1, 65535)]
+    [Required]
+    public int ProxyPort { get; set; }
+
+    [Required]
+    public required string ProxyBaseUrl { get; set; }
+
+    [Required]
     public int RequestTimeoutSeconds { get; set; }
+
+    public bool EnableConnectionLogging { get; set; } = false;
 }

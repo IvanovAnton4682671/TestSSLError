@@ -16,34 +16,27 @@ internal class TCPServer : BackgroundService
         _tcpHandler = tcpHandler;
     }
 
-    /// <summary>
-    /// Основной цикл обработки входящих соединений
-    /// </summary>
-    /// <param name="cancellationToken">Токен отмены</param>
     protected override async Task ExecuteAsync(CancellationToken cancellationToken)
     {
         TcpListener tcpListener = new TcpListener(IPAddress.Any, _serverSettings.Port);
         tcpListener.Start();
-        _logger.LogInformation("Слушатель запущен: Port={Port}", _serverSettings.Port);
+        _logger.LogInformation("Слушатель запущен: Port={Port}, KeepAlive={KeepAlive}, MaxRequests={MaxRequests}, IdleTimeout={IdleTimeout}",
+            _serverSettings.Port, _serverSettings.EnableKeepAlive, _serverSettings.MaxRequestsPerConnection, _serverSettings.IdleTimeoutSeconds);
 
         try
         {
-            while (cancellationToken.IsCancellationRequested is false)
+            while (!cancellationToken.IsCancellationRequested)
             {
                 TcpClient tcpClient;
-
                 try
                 {
                     tcpClient = await tcpListener.AcceptTcpClientAsync(cancellationToken);
-
                     _logger.LogInformation("Подключение: {RemoteEndPoint}", tcpClient.Client.RemoteEndPoint);
-
-                    //Обрабатываем соединение без ожидания
                     _ = Task.Run(() => _tcpHandler.HandleAsync(tcpClient, cancellationToken), cancellationToken);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
-                    _logger.LogInformation("Слушатель остановлен по CancellationToken: Port={Port}", _serverSettings.Port);
+                    _logger.LogInformation("Слушатель остановлен по CancellationToken");
                     break;
                 }
             }

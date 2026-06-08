@@ -8,7 +8,6 @@ internal class Program
             .ConfigureServices((context, services) =>
             {
                 services.Configure<ProxySettings>(context.Configuration.GetSection(ProxySettings.SectionName));
-
                 services.AddSingleton<TCPHandler>();
                 services.AddHostedService<TCPProxy>();
             })

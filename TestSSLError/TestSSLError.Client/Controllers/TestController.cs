@@ -1,79 +1,93 @@
 namespace TestSSLError.Client.Controllers;
 
-/// <summary>
-/// Основной контроллер для тестового GET-запроса к целевому TCP-серверу
-/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 public class TestController : ControllerBase
 {
     private readonly ILogger<TestController> _logger;
-    private readonly List<EndpointsSettings> _endpointsSettings;
-    private readonly ClientSettings _clientSettings;
+    private readonly ClientSettings _settings;
     private readonly IHttpClientFactory _httpClientFactory;
 
-    public TestController(
-        ILogger<TestController> logger,
-        IOptions<List<EndpointsSettings>> endpointsSettings,
-        IOptions<ClientSettings> clientSettings,
-        IHttpClientFactory httpClientFactory
-    )
+    public TestController(ILogger<TestController> logger, IOptions<ClientSettings> settings, IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
-        _endpointsSettings = endpointsSettings.Value;
-        _clientSettings = clientSettings.Value;
+        _settings = settings.Value;
         _httpClientFactory = httpClientFactory;
     }
 
     /// <summary>
-    /// Тестовый GET-запрос через порт прокси на целевой TCP-сервер
+    /// Отправить запрос через прокси с указанием сценария (заголовок X-Scenario)
     /// </summary>
-    /// <param name="port">Порт прокси</param>
-    /// <param name="cancellationToken">Токен отмены</param>
     [HttpGet("request")]
-    public async Task<ActionResult> SendRequest([FromQuery, Required, Range(1, 65535)] int port, CancellationToken cancellationToken)
+    public async Task<ActionResult> SendRequest(
+        [FromQuery] ScenarioMode scenario,
+        CancellationToken cancellationToken = default)
     {
-        // Ищем эндпоинт по порту
-        EndpointsSettings? endpoint = _endpointsSettings.FirstOrDefault(e => e.Port == port);
-        if (endpoint == null)
-        {
-            return BadRequest($"Port={port} не найден в конфигурации клиента. Доступные порты: " +
-                $"{string.Join(", ", _endpointsSettings.Select(e => e.Port))}"
-            );
-        }
+        var client = _httpClientFactory.CreateClient("ProxyClient");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/");
+        request.Headers.TryAddWithoutValidation("X-Scenario", scenario.ToString());
 
-        string requestUrl = $"{endpoint.BaseUrl.TrimEnd('/')}/";
-
-        if (Uri.TryCreate(requestUrl, UriKind.Absolute, out var uri) is false)
-        {
-            return BadRequest($"Некорректный URL: {requestUrl}");
-        }
-
-        HttpClient client = _httpClientFactory.CreateClient("TargetClient");
+        _logger.LogInformation("Отправка запроса со сценарием: {Scenario}", scenario);
 
         try
         {
-            using HttpResponseMessage response = await client.GetAsync(uri, cancellationToken);
+            using var response = await client.SendAsync(request, cancellationToken);
+            string body = await response.Content.ReadAsStringAsync(cancellationToken);
 
             return Ok(new
             {
-                Port = port,
-                Url = requestUrl,
-                response.StatusCode,
-                Reason = response.ReasonPhrase
+                Scenario = scenario.ToString(),
+                StatusCode = (int)response.StatusCode,
+                Reason = response.ReasonPhrase,
+                Body = body
             });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Ошибка при отправке запроса по Url={Url}", requestUrl);
-
+            _logger.LogError(ex, "Ошибка при сценарии {Scenario}", scenario);
             return StatusCode(500, new
             {
-                Port = port,
-                Url = requestUrl,
+                Scenario = scenario.ToString(),
                 Error = ex.Message,
                 Type = ex.GetType().FullName
             });
         }
+    }
+
+    /// <summary>
+    /// Стресс‑тест: несколько запросов подряд с одним сценарием
+    /// </summary>
+    [HttpGet("stress")]
+    public async Task<ActionResult> StressTest(
+        [FromQuery] ScenarioMode scenario,
+        [FromQuery] int count = 10,
+        [FromQuery] int delayMs = 500,
+        CancellationToken cancellationToken = default)
+    {
+        var client = _httpClientFactory.CreateClient("ProxyClient");
+        var results = new List<object>();
+
+        for (int i = 0; i < count; i++)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/");
+            request.Headers.TryAddWithoutValidation("X-Scenario", scenario.ToString());
+
+            try
+            {
+                using var response = await client.SendAsync(request, cancellationToken);
+                results.Add(new { Request = i + 1, Success = true, Status = (int)response.StatusCode });
+            }
+            catch (Exception ex)
+            {
+                results.Add(new { Request = i + 1, Success = false, Error = ex.Message });
+            }
+
+            if (delayMs > 0 && i < count - 1)
+            {
+                await Task.Delay(delayMs, cancellationToken);
+            }
+        }
+
+        return Ok(new { Scenario = scenario.ToString(), Total = count, Results = results });
     }
 }

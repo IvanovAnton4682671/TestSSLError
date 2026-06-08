@@ -4,27 +4,60 @@ public class Program
 {
     public static void Main(string[] args)
     {
-        WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+        var builder = WebApplication.CreateBuilder(args);
 
-        builder.Services.Configure<List<EndpointsSettings>>(builder.Configuration.GetSection(EndpointsSettings.SectionName));
         builder.Services.Configure<ClientSettings>(builder.Configuration.GetSection(ClientSettings.SectionName));
 
         builder.Services.AddControllers();
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
 
-        // HttpClient без фиксированного адреса
-        builder.Services.AddHttpClient("TargetClient", (serviceProvider, client) =>
+        // ќбщий SocketsHttpHandler с единым пулом
+        builder.Services.AddSingleton(sp =>
         {
-            ClientSettings clientSettings = serviceProvider.GetRequiredService<IOptions<ClientSettings>>().Value;
-            client.Timeout = TimeSpan.FromSeconds(clientSettings.RequestTimeoutSeconds);
-        })
-        .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
-        {
-            ServerCertificateCustomValidationCallback = (sender, cert, chain, SslPolicyErrors) => true
+            var settings = sp.GetRequiredService<IOptions<ClientSettings>>().Value;
+            var handler = new SocketsHttpHandler
+            {
+                PooledConnectionIdleTimeout = TimeSpan.FromSeconds(30),
+                PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+                MaxConnectionsPerServer = 10,
+                ConnectTimeout = TimeSpan.FromSeconds(settings.RequestTimeoutSeconds)
+            };
+
+            if (settings.EnableConnectionLogging)
+            {
+                handler.ConnectCallback = async (context, ct) =>
+                {
+                    var socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
+                    var logger = sp.GetRequiredService<ILogger<Program>>();
+                    try
+                    {
+                        logger.LogInformation("[Connect] Connecting to {Host}:{Port}", context.DnsEndPoint.Host, context.DnsEndPoint.Port);
+                        await socket.ConnectAsync(context.DnsEndPoint, ct);
+                        logger.LogInformation("[Connect] Connected from {LocalEndPoint}", socket.LocalEndPoint);
+                        return new NetworkStream(socket, ownsSocket: true);
+                    }
+                    catch
+                    {
+                        socket.Dispose();
+                        throw;
+                    }
+                };
+            }
+            return handler;
         });
 
-        WebApplication app = builder.Build();
+        builder.Services.AddHttpClient("ProxyClient")
+            .ConfigureHttpClient((sp, client) =>
+            {
+                var settings = sp.GetRequiredService<IOptions<ClientSettings>>().Value;
+                client.BaseAddress = new Uri(settings.ProxyBaseUrl);
+                client.Timeout = TimeSpan.FromSeconds(settings.RequestTimeoutSeconds);
+                client.DefaultRequestHeaders.ConnectionClose = false;
+            })
+            .ConfigurePrimaryHttpMessageHandler(sp => sp.GetRequiredService<SocketsHttpHandler>());
+
+        var app = builder.Build();
 
         app.UseSwagger();
         app.UseSwaggerUI();
